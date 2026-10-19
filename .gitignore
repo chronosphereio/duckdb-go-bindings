@@ -2,3 +2,4 @@
 .DS_Store
 go.work
 go.work.sum
+_build

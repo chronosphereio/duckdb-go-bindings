@@ -1,5 +1,83 @@
 # duckdb-go-bindings
 
+> [!NOTE]
+> This fork rebuilds the prebuilt archives in `lib/linux-*` and
+> `lib/darwin-*` from the pinned DuckDB tag with zig
+> (`scripts/build_duckdb.sh`): linux against musl, so cgo binaries link
+> and run on alpine, and darwin against Apple's libc++ with a macOS 15
+> floor. The file set and `prebuilt.go` are upstream's. jemalloc's
+> vendored defs gate a few Linux features on `__GLIBC__`, so the musl
+> jemalloc runs the portable code paths. Extension autoload and
+> autoinstall are off in these archives, unlike upstream's.
+
+## Updating DuckDB (this fork)
+
+Fork: `github.com/chronosphereio/duckdb-go-bindings`, branch
+`zig.0-17`, one commit on top of the upstream tag it wraps. Only the
+four `lib/<platform>/*.a` sets differ from upstream; `prebuilt.go`,
+`duckdb.h` and the Go code are upstream's, so a DuckDB bump is a
+rebase onto the matching upstream bindings tag plus a rebuild.
+
+Tag scheme: `lib/<platform>/v<duckdb>-zig<zig>-<build>`, e.g.
+`lib/linux-arm64/v1.5.3-zig0.17.0-1`. A new DuckDB resets `<build>`
+to 1; rebuilding the same DuckDB with a new zig or a fixed script
+bumps it. The version appears only on the right-hand side of the
+consumer's `replace`, so it is independent of the `v0.1NNMM.P`
+version `duckdb-go-bindings` itself requires and only has to exist
+as a tag. The sources branch (`duckdb-src`) uses
+`lib/<platform>/v<duckdb>-src-<build>` so the two never collide.
+
+1. Rebase `zig.0-17` onto the upstream tag for the new DuckDB
+   (`v0.1NNMM.P` for DuckDB `vN.NN.MM`); upstream's `include/duckdb.h`
+   must match the DuckDB being built.
+2. Bump `DUCKDB_VERSION` and `DUCKDB_COMMIT` in
+   `scripts/build_duckdb.sh`; the commit is the tag's
+   (`git rev-parse <tag>^{commit}` in a DuckDB checkout, or the
+   release page). `DUCKDB_EXTENSIONS` stays upstream's set unless
+   `prebuilt.go`'s `LDFLAGS` changed. The CPU baselines (`-mcpu`)
+   live next to them: `x86_64_v3` (AVX2) for linux-amd64 and
+   darwin-amd64, matching the consumer's `GOAMD64=v3`; `apple_m1`
+   for darwin-arm64, which is zig's own default for aarch64-macos;
+   `generic+v8_2a+lse+crypto` for linux-arm64, deliberately without
+   SVE so the binaries also run in colima/Docker Desktop VMs on Apple
+   Silicon (no `neoverse_v2`/`v9a`). The linux-arm64 proof is the
+   consumer's test binary passing on alpine arm64 inside colima.
+3. Build the four platforms. Needs git, cmake, make and zig (the
+   version in the branch name, `zig-0.17.0` from `make install-zig`
+   in the monorepo lands in `_tools/bin/`); about 5 minutes and a
+   few GB of disk per platform on an M-series Mac. The script clones
+   DuckDB into `_build/src` on first use (checks the commit pin),
+   compiles in `_build/<goos>-<goarch>` and replaces
+   `lib/<goos>-<goarch>/*.a`; `_build/` is gitignored.
+
+   ```
+   scripts/build_duckdb.sh /path/to/zig-0.17.0 linux amd64
+   scripts/build_duckdb.sh /path/to/zig-0.17.0 linux arm64
+   scripts/build_duckdb.sh /path/to/zig-0.17.0 darwin amd64
+   scripts/build_duckdb.sh /path/to/zig-0.17.0 darwin arm64
+   ```
+
+   Leave `prebuilt.go` untouched: the archive set is the one upstream's
+   `LDFLAGS` name. `git status` should show only `lib/*/*.a` changes.
+4. Commit (amend the fork commit; this branch is kept to one commit
+   and force-pushed with `--force-with-lease`), then tag each
+   platform and push:
+
+   ```
+   for p in linux-amd64 linux-arm64 darwin-amd64 darwin-arm64; do
+     git tag "lib/$p/v<duckdb>-zig<zig>-<build>"
+   done
+   git push --force-with-lease origin zig.0-17
+   git push origin 'refs/tags/lib/*'
+   ```
+
+5. In the monorepo bump the four
+   `replace github.com/duckdb/duckdb-go-bindings/lib/<platform> => github.com/chronosphereio/duckdb-go-bindings/lib/<platform> <version>`
+   lines in `go.mod` (and the `duckdb-go` / `duckdb-go-bindings`
+   requires if DuckDB moved), `GOFLAGS=-mod=mod go mod download`, let
+   `go mod tidy` refresh `go.sum`, and run `go test ./src/tako/db/live/`
+   plus a zig cross build of a cgo service.
+
 ![Tests status](https://github.com/duckdb/duckdb-go-bindings/actions/workflows/run_tests.yml/badge.svg)
 
 This repository wraps DuckDB's C API calls in Go native types and functions.
