@@ -1,5 +1,20 @@
 # duckdb-go-bindings
 
+> [!NOTE]
+> This fork compiles DuckDB from source under `go build` instead of
+> shipping prebuilt archives. The nested module `duckdbsrc/`
+> (`github.com/chronosphereio/duckdb-go-bindings/duckdbsrc`, tag
+> `duckdbsrc/<version>`) holds the pinned DuckDB C++ sources wrapped
+> so that cgo compiles them; `lib/linux-*` and `lib/darwin-*` keep
+> upstream's module paths, build constraints and `prebuilt.go` but
+> contain nothing except a blank import of `duckdbsrc`. Consumers see
+> the same import graph as upstream, so no build tag is needed; linux
+> binaries built with zig against musl link and run on alpine, and
+> darwin builds use the host clang. No allocator is bundled: DuckDB
+> uses the process malloc, which the consumer picks (the monorepo
+> links mimalloc). `lib/windows-amd64` is upstream's. See
+> `duckdbsrc/README.md`.
+
 ![Tests status](https://github.com/duckdb/duckdb-go-bindings/actions/workflows/run_tests.yml/badge.svg)
 
 This repository wraps DuckDB's C API calls in Go native types and functions.

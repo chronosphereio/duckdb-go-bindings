@@ -2,9 +2,5 @@
 
 package duckdb_go_bindings_platform
 
-/*
-#cgo CPPFLAGS: -I${SRCDIR} -DDUCKDB_STATIC_BUILD
-#cgo LDFLAGS: -rdynamic -lduckdb_static -lduckdb_generated_extension_loader -lautocomplete_extension -lcore_functions_extension -licu_extension -ljson_extension -lparquet_extension -ltpcds_extension -ltpch_extension -lduckdb_fastpforlib -lduckdb_fmt -lduckdb_fsst -lduckdb_hyperloglog -lduckdb_mbedtls -lduckdb_miniz -lduckdb_pg_query -lduckdb_re2 -lduckdb_skiplistlib -lduckdb_utf8proc -lduckdb_yyjson -lduckdb_zstd -lstdc++ -lm -ldl -L${SRCDIR}
-#include <duckdb.h>
-*/
-import "C"
+// DuckDB is compiled from source by duckdbsrc; nothing is prebuilt.
+import _ "github.com/chronosphereio/duckdb-go-bindings/duckdbsrc"
