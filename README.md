@@ -1,5 +1,83 @@
 # duckdb-go-bindings
 
+> [!NOTE]
+> This fork compiles DuckDB from source under `go build` instead of
+> linking prebuilt archives; see "This fork" below. Upstream's text
+> about `lib/<platform>` modules and release tooling applies only to
+> `lib/windows-amd64`, the one platform module left.
+
+## This fork
+
+`github.com/chronosphereio/duckdb-go-bindings`, branch `duckdb-src`:
+one commit on top of the upstream bindings tag it wraps. Consumers
+keep the upstream module path and point it here:
+
+```
+replace github.com/duckdb/duckdb-go-bindings => github.com/chronosphereio/duckdb-go-bindings v1.5.3-src-<build>
+```
+
+The root package compiles the DuckDB v1.5.3 amalgamation (core plus
+the core_functions, json, parquet and icu extensions) with cgo; the
+objects land in `GOCACHE` like any other cgo package, so the C++ is
+compiled once per toolchain/flags/GOOS/GOARCH and reused until the
+sources change. linux builds with zig against musl run on alpine;
+darwin builds use the host clang. Extension autoload and autoinstall
+are off and no loadable extensions exist, so `LOAD` of anything beyond
+the bundled set does not work (`TestOpenSQLiteDB` fails for that
+reason). No allocator is bundled: DuckDB uses the process malloc,
+which the consumer picks (the monorepo links mimalloc into its linux
+cgo executables). Compiling `upstream/duckdb.cpp` needs about 9 GB of
+RAM; total CPU is about 250 s on an M-series Mac.
+
+The build tags `duckdb_use_lib` and `duckdb_use_static_lib` keep their
+upstream meaning: every file below carries
+`//go:build !duckdb_use_lib && !duckdb_use_static_lib`, so either tag
+skips the sources and links the library you supply.
+
+### Layout
+
+- `upstream/`: generator output only (`duckdb.hpp`, one translation
+  unit per upstream build unit, DuckDB's `LICENSE`).
+  Never edit it; it can be `rm -rf`'d and regenerated. `duckdb.h` is
+  `include/duckdb.h`, shared with the Go side.
+- `duckdb.cpp`, `core_functions.cpp`, `json.cpp`, `parquet.cpp`,
+  `icu.cpp`: one-line `#include "upstream/<same>.cpp"` wrappers; cgo
+  only compiles files directly in the package directory.
+- `upstream_stamp.h`: keys the go build cache to `upstream/` (see
+  `gen_upstream.py`).
+- `cgo_source.go`: the C++ flags (`-O3`, `-std=c++11`, autoload off).
+  No CPU baseline: that is the consumer's `CC`/`CXX`.
+- `gen_upstream.py`: the generator. It imports upstream's
+  `scripts/amalgamation.py` unchanged, patches only include resolution
+  and file writing, and refuses to run if the checkout's
+  `src/include/duckdb.h` differs from `include/duckdb.h`. Its tables
+  (`VERBATIM`, `INLINE_EXTRA`, `ANGLE_DIRS`, `PRELUDE`, `RENAMES`)
+  list where one TU per build unit exposes what upstream's per-file
+  build hides; each miss is a loud compile error, fixed by one more
+  entry, never by editing `upstream/`.
+
+### Updating DuckDB
+
+1. Rebase `duckdb-src` onto the upstream bindings tag for the new
+   DuckDB (`v0.1NNMM.P` for DuckDB `vN.NN.MM`), keeping one commit.
+2. Regenerate from a checkout of the matching DuckDB tag:
+
+   ```
+   git clone --depth 1 --branch v1.5.3 https://github.com/duckdb/duckdb.git /tmp/duckdb-v1.5.3
+   rm -rf upstream upstream_stamp.h
+   python3 gen_upstream.py /tmp/duckdb-v1.5.3
+   ```
+
+   (`DUCKDB_SRC=/tmp/duckdb-v1.5.3 go generate .` runs the last line.)
+3. `go vet ./...`, `go test -skip TestOpenSQLiteDB .`, and the
+   consumer's tests against the working tree (a filesystem `replace`).
+4. Tag the root `v<duckdb>-src-<build>` (e.g. `v1.5.3-src-4`); a new
+   DuckDB resets `<build>` to 1. The tag only appears on the right-hand
+   side of the consumer's `replace`, so it is independent of the
+   `v0.1NNMM.P` versions upstream publishes. Push the branch
+   (`--force-with-lease`) and the tag, then bump the consumer's
+   `replace` and let `go mod tidy` refresh `go.sum`.
+
 ![Tests status](https://github.com/duckdb/duckdb-go-bindings/actions/workflows/run_tests.yml/badge.svg)
 
 This repository wraps DuckDB's C API calls in Go native types and functions.
