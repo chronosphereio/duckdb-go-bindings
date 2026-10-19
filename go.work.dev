@@ -6,6 +6,7 @@ go 1.24
 use .
 
 replace (
+	github.com/chronosphereio/duckdb-go-bindings/duckdbsrc => ./duckdbsrc
 	github.com/duckdb/duckdb-go-bindings/lib/darwin-amd64 => ./lib/darwin-amd64
 	github.com/duckdb/duckdb-go-bindings/lib/darwin-arm64 => ./lib/darwin-arm64
 	github.com/duckdb/duckdb-go-bindings/lib/linux-amd64 => ./lib/linux-amd64
